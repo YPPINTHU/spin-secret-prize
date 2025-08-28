@@ -90,38 +90,27 @@ export const SpinWheel = ({ items, onSpin, isSpinning }: SpinWheelProps) => {
       }
     }
 
-    // Calculate precise rotation to land on winner
+    // Calculate precise rotation to align winner with arrow
     const winnerIndex = items.findIndex(item => item.id === winner.id);
     const sliceAngle = 360 / items.length;
     
-    // Calculate the center angle of the winning slice
+    // Calculate the angle where the winning slice center should be
+    // Since the arrow points down from the top, we want the slice center at 0 degrees (top)
     const sliceCenterAngle = winnerIndex * sliceAngle + (sliceAngle / 2);
     
-    // Add multiple full rotations for visual effect (5-7 rotations)
-    const numberOfRotations = 5 + Math.random() * 2;
+    // Add multiple full rotations for visual effect (4-6 rotations)
+    const numberOfRotations = 4 + Math.random() * 2;
     
-    // Calculate final rotation: full rotations + adjustment to align slice center with top arrow
-    // We subtract sliceCenterAngle because we want that slice to be at the top (0 degrees)
-    const finalRotation = numberOfRotations * 360 + (360 - sliceCenterAngle);
+    // To align the winning slice with the top arrow:
+    // We need to rotate by: (full rotations * 360) - (current slice center position)
+    // This brings the slice center to 0 degrees (where the arrow points)
+    const finalRotation = numberOfRotations * 360 - sliceCenterAngle;
 
     setRotation(prev => prev + finalRotation);
 
-    // Trigger winner callback after 5s animation + 200ms end snap
+    // Trigger winner callback after 5s animation
     setTimeout(() => {
-      // Add a small snap effect by slightly adjusting rotation for precise alignment
-      const canvas = canvasRef.current;
-      if (canvas) {
-        canvas.style.transition = 'transform 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94)';
-        // Ensure perfect alignment by normalizing to exact slice center
-        const currentRotation = rotation + finalRotation;
-        const normalizedRotation = currentRotation - (currentRotation % 360) + (360 - sliceCenterAngle);
-        canvas.style.transform = `rotate(${normalizedRotation}deg)`;
-        
-        // Add winning slice highlight effect
-        setTimeout(() => {
-          onSpin(winner);
-        }, 200);
-      }
+      onSpin(winner);
     }, 5000);
   };
 
@@ -150,7 +139,7 @@ export const SpinWheel = ({ items, onSpin, isSpinning }: SpinWheelProps) => {
             ref={canvasRef}
             width={400}
             height={400}
-            className="transition-transform duration-[5000ms] ease-[cubic-bezier(0.23,1,0.32,1)] rounded-full border-4 border-primary"
+            className="transition-transform duration-[5000ms] ease-[cubic-bezier(0.25,0.1,0.25,1)] rounded-full border-4 border-primary will-change-transform"
           />
         </div>
       </div>
