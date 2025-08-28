@@ -49,20 +49,14 @@ export const WinnerModal = ({ winner, isOpen, onClose }: WinnerModalProps) => {
       )}
       
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent 
-          className="glass-card border-primary/50 max-w-md"
-          aria-describedby="winner-description"
-        >
+        <DialogContent className="glass-card border-primary/50 max-w-md">
           <div className="text-center space-y-6 p-6">
             <div className="animate-bounce-in">
               <Trophy className="w-16 h-16 mx-auto text-primary animate-pulse-glow" />
             </div>
             
             <div className="space-y-2">
-              <h2 
-                className="text-3xl font-bold gradient-primary bg-clip-text text-transparent"
-                id="winner-title"
-              >
+              <h2 className="text-3xl font-bold gradient-primary bg-clip-text text-transparent">
                 🎉 Winner! 🎉
               </h2>
               <div 
@@ -77,12 +71,9 @@ export const WinnerModal = ({ winner, isOpen, onClose }: WinnerModalProps) => {
               </div>
             </div>
             
-            <div 
-              className="flex items-center justify-center space-x-2 text-muted-foreground"
-              id="winner-description"
-            >
+            <div className="flex items-center justify-center space-x-2 text-muted-foreground">
               <Sparkles className="w-4 h-4" />
-              <span>Congratulations on your win!</span>
+              <span>Congratulations!</span>
               <Sparkles className="w-4 h-4" />
             </div>
             
