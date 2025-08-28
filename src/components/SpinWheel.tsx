@@ -120,8 +120,8 @@ export const SpinWheel = ({ items, onSpin, isSpinning }: SpinWheelProps) => {
     <div className="flex flex-col items-center space-y-8">
       <div className="relative">
         {/* Pointer */}
-        <div className="absolute top-2 left-1/2 transform -translate-x-1/2 z-10">
-          <div className="w-0 h-0 border-l-[12px] border-r-[12px] border-b-[24px] border-l-transparent border-r-transparent border-b-primary drop-shadow-lg"></div>
+        <div className="absolute top-0 left-1/2 transform -translate-x-1/2 z-10">
+          <div className="w-0 h-0 border-l-[12px] border-r-[12px] border-t-[24px] border-l-transparent border-r-transparent border-t-primary drop-shadow-lg transform rotate-180"></div>
         </div>
         
         {/* Wheel */}
