@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import SpinWheel from "@/components/SpinWheel";
 import { ItemManager } from "@/components/ItemManager";
 import { AdminPanel } from "@/components/AdminPanel";
 import { WinnerModal } from "@/components/WinnerModal";
-import { SaveLoadPanel } from "@/components/SaveLoadPanel";
+import { WheelConfigManager } from "@/components/WheelConfigManager";
 import { Sparkles } from "lucide-react";
 
 interface WheelItem {
@@ -72,9 +72,9 @@ const Index = () => {
 
           {/* Controls Section */}
           <div className="space-y-6 animate-fade-in-up" style={{ animationDelay: "0.4s" }}>
-            <SaveLoadPanel
+            <WheelConfigManager
               items={items}
-              onItemsLoad={setItems}
+              onItemsChange={setItems}
             />
             
             <AdminPanel
