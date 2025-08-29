@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
@@ -15,118 +15,59 @@ interface SpinWheelProps {
   isSpinning: boolean;
 }
 
-export const SpinWheel = ({ items, onSpin, isSpinning }: SpinWheelProps) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [rotation, setRotation] = useState(0);
+export default function SpinWheel({ items, onSpin, isSpinning }: SpinWheelProps) {
+    const [rotation, setRotation] = useState(0); // degrees
+    const [selected, setSelected] = useState<number | null>(null);
+    const wheelRef = useRef<HTMLDivElement | null>(null);
 
-  const drawWheel = () => {
-    const canvas = canvasRef.current;
-    if (!canvas || items.length === 0) return;
+    const segmentAngle = useMemo(() => 360 / items.length, [items.length]);
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    // Helper: compute the final rotation so the center of `index` lands exactly at the top arrow.
+    // Explanation: segments are laid out clockwise; to bring a segment center at 0deg (top),
+    // we rotate the wheel by (360 - (index*segmentAngle + segmentAngle/2)) degrees.
+    const computeFinalRotation = useCallback((index: number, spins = 6) => {
+        const centerOfSegment = index * segmentAngle + segmentAngle / 2;
+        const targetDeg = (360 - centerOfSegment) % 360;
+        // add full spins to make it feel good and a tiny random offset for realism
+        const randomOffset = (Math.random() - 0.5) * (segmentAngle * 0.2); // +/- small fraction
+        return spins * 360 + targetDeg + randomOffset;
+    }, [segmentAngle]);
 
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
-    const radius = Math.min(centerX, centerY) - 10;
+    // Start spin and set the final selected index explicitly so highlight is consistent
+    const spinTo = useCallback((index: number) => {
+        if (isSpinning) return;
+        setIsSpinning(true);
+        setSelected(index); // mark which one we intend to land on (keeps highlight accurate)
+        const final = computeFinalRotation(index, 6);
+        // Force GPU acceleration and use a smooth easing for the transition
+        if (wheelRef.current) {
+            const el = wheelRef.current;
+            el.style.transition = "transform 4s cubic-bezier(.22,.98,.2,.99)"; // smooth easing
+            el.style.willChange = "transform";
+            // Setting transform via style to ensure the transition happens smoothly on the GPU
+            requestAnimationFrame(() => {
+                el.style.transform = `rotate(${final}deg) translateZ(0)`;
+            });
+        }
+        setRotation(final);
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // listen for transition end once
+        const handler = () => {
+            if (wheelRef.current) {
+                wheelRef.current.style.transition = "";
+                wheelRef.current.style.willChange = "";
+            }
+            setIsSpinning(false);
+            // Normalize final rotation into [0,360) and compute landed index defensively from the index we used.
+            // We already set `selected` to the index we moved to; that's the canonical result.
+            onSpin(items[index]);
+            if (wheelRef.current) wheelRef.current.removeEventListener("transitionend", handler);
+        };
+        if (wheelRef.current) wheelRef.current.addEventListener("transitionend", handler);
+    }, [computeFinalRotation, isSpinning, onSpin]);
 
-    const sliceAngle = (2 * Math.PI) / items.length;
-
-    items.forEach((item, index) => {
-      const startAngle = index * sliceAngle;
-      const endAngle = startAngle + sliceAngle;
-
-      // Draw slice
-      ctx.beginPath();
-      ctx.moveTo(centerX, centerY);
-      ctx.arc(centerX, centerY, radius, startAngle, endAngle);
-      ctx.closePath();
-      ctx.fillStyle = item.color;
-      ctx.fill();
-      ctx.strokeStyle = "#1a1a1a";
-      ctx.lineWidth = 3;
-      ctx.stroke();
-
-      // Draw text
-      ctx.save();
-      ctx.translate(centerX, centerY);
-      ctx.rotate(startAngle + sliceAngle / 2);
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 16px Arial";
-      ctx.textAlign = "center";
-      ctx.fillText(item.text, radius * 0.7, 5);
-      ctx.restore();
-    });
-
-    // Draw center circle
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, 20, 0, 2 * Math.PI);
-    ctx.fillStyle = "#1a1a1a";
-    ctx.fill();
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 3;
-    ctx.stroke();
-  };
-
-  const spin = () => {
-    if (items.length === 0) {
-      toast.error("Add some items to the wheel first!");
-      return;
-    }
-
-    // Calculate weighted random selection
-    const totalProbability = items.reduce((sum, item) => sum + item.probability, 0);
-    const random = Math.random() * totalProbability;
-    let accumulated = 0;
-    let winner = items[0];
-
-    for (const item of items) {
-      accumulated += item.probability;
-      if (random <= accumulated) {
-        winner = item;
-        break;
-      }
-    }
-
-    // Calculate precise rotation to align winner with arrow
-    const winnerIndex = items.findIndex(item => item.id === winner.id);
-    const sliceAngle = 360 / items.length;
-    
-    // Calculate the angle where the winning slice center should be
-    // Since the arrow points down from the top, we want the slice center at 0 degrees (top)
-    const sliceCenterAngle = winnerIndex * sliceAngle + (sliceAngle / 2);
-    
-    // Add multiple full rotations for visual effect (4-6 rotations)
-    const numberOfRotations = 4 + Math.random() * 2;
-    
-    // To align the winning slice with the top arrow:
-    // We need to rotate by: (full rotations * 360) - (current slice center position)
-    // This brings the slice center to 0 degrees (where the arrow points)
-    const finalRotation = numberOfRotations * 360 - sliceCenterAngle;
-
-    setRotation(prev => prev + finalRotation);
-
-    // Trigger winner callback after 5s animation
-    setTimeout(() => {
-      onSpin(winner);
-    }, 5000);
-  };
-
-  useEffect(() => {
-    drawWheel();
-  }, [items]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (canvas) {
-      canvas.style.transform = `rotate(${rotation}deg)`;
-    }
-  }, [rotation]);
-
-  return (
-    <div className="flex flex-col items-center space-y-8">
+    return (
+        <div className="flex flex-col items-center space-y-8">
       <div className="relative">
         {/* Fixed Pointer - positioned outside wheel rim */}
         <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 z-10">
@@ -135,17 +76,43 @@ export const SpinWheel = ({ items, onSpin, isSpinning }: SpinWheelProps) => {
         
         {/* Wheel */}
         <div className="wheel-glow">
-          <canvas
-            ref={canvasRef}
-            width={400}
-            height={400}
-            className="transition-transform duration-[5000ms] ease-[cubic-bezier(0.25,0.1,0.25,1)] rounded-full border-4 border-primary will-change-transform"
-          />
+          <div
+                className="wheel"
+                ref={wheelRef}
+                // keep an inline transform to reflect current rotation if code renders without transition
+                style={{
+                    transform: `rotate(${rotation}deg) translateZ(0)`,
+                    // ensure hardware acceleration and smoothness while idle
+                    willChange: isSpinning ? "transform" : "auto",
+                }}
+            >
+                {items.map((label, i) => {
+                    const rotateDeg = i * segmentAngle;
+                    const isActive = selected === i;
+                    return (
+                        <div
+                            key={label}
+                            className={`segment ${isActive ? "active" : ""}`}
+                            style={{
+                                transform: `rotate(${rotateDeg}deg) skewY(${90 - segmentAngle}deg)`,
+                            }}
+                        >
+                            <span
+                                style={{
+                                    transform: `skewY(${-(90 - segmentAngle)}deg) rotate(${segmentAngle / 2}deg)`,
+                                }}
+                            >
+                                {label}
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
         </div>
       </div>
 
       <Button
-        onClick={spin}
+        onClick={() => spinTo(Math.floor(Math.random() * items.length))}
         disabled={isSpinning || items.length === 0}
         size="lg"
         className="gradient-primary hover:scale-105 transition-smooth font-bold text-lg px-12 py-4 shadow-2xl"
@@ -153,5 +120,5 @@ export const SpinWheel = ({ items, onSpin, isSpinning }: SpinWheelProps) => {
         {isSpinning ? "Spinning..." : "SPIN THE WHEEL!"}
       </Button>
     </div>
-  );
-};
+    );
+}
