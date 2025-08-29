@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { SpinWheel } from "@/components/SpinWheel";
+import SpinWheel from "@/components/SpinWheel";
 import { ItemManager } from "@/components/ItemManager";
 import { AdminPanel } from "@/components/AdminPanel";
 import { WinnerModal } from "@/components/WinnerModal";
