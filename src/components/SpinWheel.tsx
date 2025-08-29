@@ -1,124 +1,149 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
 
-interface WheelItem {
-  id: string;
-  text: string;
-  color: string;
-  probability: number;
-}
-
-interface SpinWheelProps {
-  items: WheelItem[];
-  onSpin: (winner: WheelItem) => void;
-  isSpinning: boolean;
-}
-
-export default function SpinWheel({ items, onSpin, isSpinning }: SpinWheelProps) {
+export function SpinWheel({
+    items,
+    onFinish,
+    onSpin,
+    isSpinning: isSpinningProp,
+}: {
+    items: Array<{
+        id?: string | number;
+        text: string;
+        color?: string;
+        probability?: number;
+    }>;
+    onFinish?: (index: number) => void;
+    onSpin?: (item: { id?: string | number; text: string; color?: string; probability?: number }) => void;
+    isSpinning?: boolean;
+}) {
+    const [isSpinning, setIsSpinning] = useState(false);
     const [rotation, setRotation] = useState(0); // degrees
     const [selected, setSelected] = useState<number | null>(null);
     const wheelRef = useRef<HTMLDivElement | null>(null);
+    const isSpinningRef = useRef(false);
+    const currentRotationRef = useRef(0);
 
     const segmentAngle = useMemo(() => 360 / items.length, [items.length]);
 
-    // Helper: compute the final rotation so the center of `index` lands exactly at the top arrow.
-    // Explanation: segments are laid out clockwise; to bring a segment center at 0deg (top),
-    // we rotate the wheel by (360 - (index*segmentAngle + segmentAngle/2)) degrees.
-    const computeFinalRotation = useCallback((index: number, spins = 6) => {
-        const centerOfSegment = index * segmentAngle + segmentAngle / 2;
-        const targetDeg = (360 - centerOfSegment) % 360;
-        // add full spins to make it feel good and a tiny random offset for realism
-        const randomOffset = (Math.random() - 0.5) * (segmentAngle * 0.2); // +/- small fraction
-        return spins * 360 + targetDeg + randomOffset;
-    }, [segmentAngle]);
+    const computeFinalRotation = useCallback(
+        (index: number, spins = 6) => {
+            const centerOfSegment = index * segmentAngle + segmentAngle / 2;
+            const targetDeg = (360 - centerOfSegment) % 360;
+            const currentMod = currentRotationRef.current % 360;
+            const relative = (targetDeg - currentMod + 360) % 360;
+            const randomOffset = (Math.random() - 0.5) * (segmentAngle * 0.2);
+            const final = currentRotationRef.current + spins * 360 + relative + randomOffset;
+            return final;
+        },
+        [segmentAngle]
+    );
 
-    // Start spin and set the final selected index explicitly so highlight is consistent
-    const spinTo = useCallback((index: number) => {
-        if (isSpinning) return;
-        setIsSpinning(true);
-        setSelected(index); // mark which one we intend to land on (keeps highlight accurate)
-        const final = computeFinalRotation(index, 6);
-        // Force GPU acceleration and use a smooth easing for the transition
-        if (wheelRef.current) {
+    const spinTo = useCallback(
+        (index: number) => {
+            if (isSpinningRef.current) return;
+            isSpinningRef.current = true;
+            setIsSpinning(true);
+            setSelected(index);
+            const final = computeFinalRotation(index, 6);
+
             const el = wheelRef.current;
-            el.style.transition = "transform 4s cubic-bezier(.22,.98,.2,.99)"; // smooth easing
-            el.style.willChange = "transform";
-            // Setting transform via style to ensure the transition happens smoothly on the GPU
-            requestAnimationFrame(() => {
-                el.style.transform = `rotate(${final}deg) translateZ(0)`;
-            });
-        }
-        setRotation(final);
+            if (el) {
+                // reset any existing transition, force reflow, then apply new transition
+                el.style.transition = "none";
+                // force reflow
+                // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+                el.getBoundingClientRect();
+                el.style.willChange = "transform";
+                // apply transition in next frame to ensure it's picked up
+                requestAnimationFrame(() => {
+                    el.style.transition = "transform 4s cubic-bezier(.22,.98,.2,.99)";
+                    el.style.transform = `rotate(${final}deg) translateZ(0)`;
+                });
 
-        // listen for transition end once
-        const handler = () => {
-            if (wheelRef.current) {
-                wheelRef.current.style.transition = "";
-                wheelRef.current.style.willChange = "";
+                const handler = () => {
+                    if (el) {
+                        el.style.transition = "";
+                        el.style.willChange = "";
+                    }
+                    isSpinningRef.current = false;
+                    setIsSpinning(false);
+                    currentRotationRef.current = final;
+                    setRotation(final);
+                    onFinish?.(index);
+                    // call onSpin with the actual item object for consumers
+                    onSpin?.(items[index]);
+                };
+                el.addEventListener("transitionend", handler, { once: true });
+            } else {
+                // fallback
+                isSpinningRef.current = false;
+                setIsSpinning(false);
             }
-            setIsSpinning(false);
-            // Normalize final rotation into [0,360) and compute landed index defensively from the index we used.
-            // We already set `selected` to the index we moved to; that's the canonical result.
-            onSpin(items[index]);
-            if (wheelRef.current) wheelRef.current.removeEventListener("transitionend", handler);
-        };
-        if (wheelRef.current) wheelRef.current.addEventListener("transitionend", handler);
-    }, [computeFinalRotation, isSpinning, onSpin]);
+        },
+        [computeFinalRotation, onFinish, onSpin, items]
+    );
 
     return (
-        <div className="flex flex-col items-center space-y-8">
-      <div className="relative">
-        {/* Fixed Pointer - positioned outside wheel rim */}
-        <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 z-10">
-          <div className="w-0 h-0 border-l-[15px] border-r-[15px] border-t-[30px] border-l-transparent border-r-transparent border-t-primary drop-shadow-xl"></div>
-        </div>
-        
-        {/* Wheel */}
-        <div className="wheel-glow">
-          <div
+        <div className="spin-wheel-container">
+            <div className="arrow">▼</div>
+            <div
                 className="wheel"
                 ref={wheelRef}
-                // keep an inline transform to reflect current rotation if code renders without transition
                 style={{
                     transform: `rotate(${rotation}deg) translateZ(0)`,
-                    // ensure hardware acceleration and smoothness while idle
                     willChange: isSpinning ? "transform" : "auto",
                 }}
             >
-                {items.map((label, i) => {
-                    const rotateDeg = i * segmentAngle;
-                    const isActive = selected === i;
-                    return (
-                        <div
-                            key={label}
-                            className={`segment ${isActive ? "active" : ""}`}
-                            style={{
-                                transform: `rotate(${rotateDeg}deg) skewY(${90 - segmentAngle}deg)`,
-                            }}
-                        >
-                            <span
-                                style={{
-                                    transform: `skewY(${-(90 - segmentAngle)}deg) rotate(${segmentAngle / 2}deg)`,
-                                }}
-                            >
-                                {label}
-                            </span>
-                        </div>
-                    );
-                })}
+                <svg viewBox="0 0 360 360" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+                    <g transform="translate(0,0)">
+                        {items.map((item, i) => {
+                            const startAngle = i * segmentAngle;
+                            const endAngle = startAngle + segmentAngle;
+                            const cx = 180;
+                            const cy = 180;
+                            const r = 170;
+
+                            const polarToCartesian = (centerX: number, centerY: number, radius: number, angleInDegrees: number) => {
+                                const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180.0;
+                                return {
+                                    x: centerX + radius * Math.cos(angleInRadians),
+                                    y: centerY + radius * Math.sin(angleInRadians),
+                                };
+                            };
+
+                            const describeArc = (x: number, y: number, radius: number, startAngle: number, endAngle: number) => {
+                                const start = polarToCartesian(x, y, radius, endAngle);
+                                const end = polarToCartesian(x, y, radius, startAngle);
+                                const largeArcFlag = endAngle - startAngle <= 180 ? '0' : '1';
+                                return `M ${x} ${y} L ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 0 ${end.x} ${end.y} Z`;
+                            };
+
+                            const pathD = describeArc(cx, cy, r, startAngle, endAngle);
+                            const midAngle = startAngle + segmentAngle / 2;
+                            const labelPos = polarToCartesian(cx, cy, r * 0.62, midAngle);
+                            const isActive = selected === i;
+                            const key = item.id ?? i;
+
+                            return (
+                                <g key={key}>
+                                    <path d={pathD} fill={item.color ?? '#888'} stroke="rgba(0,0,0,0.12)" strokeWidth={1} className={isActive ? 'active' : ''} />
+                                    <text x={labelPos.x} y={labelPos.y} fontSize={12} fontWeight={700} fill="#fff" textAnchor="middle" dominantBaseline="middle" style={{ pointerEvents: 'none' }}>
+                                        {item.text}
+                                    </text>
+                                </g>
+                            );
+                        })}
+                    </g>
+                </svg>
+            </div>
+
+            <div className="controls">
+                <button onClick={() => spinTo(Math.floor(Math.random() * items.length))} disabled={isSpinningProp ?? isSpinning}>
+                    Spin
+                </button>
             </div>
         </div>
-      </div>
-
-      <Button
-        onClick={() => spinTo(Math.floor(Math.random() * items.length))}
-        disabled={isSpinning || items.length === 0}
-        size="lg"
-        className="gradient-primary hover:scale-105 transition-smooth font-bold text-lg px-12 py-4 shadow-2xl"
-      >
-        {isSpinning ? "Spinning..." : "SPIN THE WHEEL!"}
-      </Button>
-    </div>
     );
 }
+
+export default SpinWheel;
